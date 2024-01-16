@@ -160,3 +160,44 @@ def plot_predictions(predictions_df, proj_id, horizon=1, forecast_col='forecast'
         ylabel='gwl [m (asl)]',
     )
     return fig, ax
+
+# Functions used in the preprocessing ################################################################################################
+# Function to flag jumps in consecutive gwlevels
+def detect_jumps(group, column, threshold):
+    # calculate diff for each group
+    x_diff = group[column].diff().abs()
+    
+    # calculate mean diff
+    x_diff_mean = x_diff.mean()
+    
+    group['is_jump'] = x_diff > threshold*x_diff_mean
+    return group
+
+# Test dataset for detect jumps function
+# df = train_df[train_df['proj_id'].isin(['SH_10L54086004', 'BY_25170'])]
+# df = df.groupby('proj_id').head(10)
+# df['gwl_diff'] = df.groupby('proj_id')['gwl'].diff()
+# df['gwl_diff_mean'] = df.groupby('proj_id')['gwl_diff'].transform('mean') # mean gives just two values, 
+# need to be transformed to give them correctly back to the df
+# df.groupby('proj_id').apply(detect_jumps, column = 'gwl', threshold = 50)
+
+# Interpolate groundwater levels up to 4 weeks (default limit = 4)
+def interpolate_gwl(dataframe, interpolation_column, resample_freq='7D', limit=4):
+    groups = []
+    for well_id, group in dataframe.groupby('proj_id'):
+        _df = group.set_index('time')[interpolation_column].resample(resample_freq).asfreq().interpolate(method='linear', limit=limit).reset_index().copy()
+        for col in group.columns.difference([interpolation_column, 'time']):  # Retain other columns
+            _df[col] = group[col].iloc[0]
+        _df['proj_id'] = well_id
+        groups.append(_df)
+    result_df = pd.concat(groups).reset_index(drop=True)
+    return result_df
+
+# Test for linear interpolation:
+# To perform the linear interpolation we first need to add NAs for the gaps 
+# filtered_train[filtered_train['time_diff']=='28 days']
+# test = filtered_train[(filtered_train['proj_id']=='BB_27390101') & (filtered_train['time']<='2003-12-07')].tail(5)
+# test
+# check after performing the interpolation
+# filtered_train[(filtered_train['proj_id']=='BB_27390101') & (filtered_train['time']<='2003-12-07')].tail(5)
+# interpolate_gwl(test, 'gwl')
