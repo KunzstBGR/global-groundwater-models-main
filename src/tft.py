@@ -10,16 +10,15 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.strategies import DDPStrategy
 # from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import EarlyStopping
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import EarlyStopping, StochasticWeightAveraging, LearningRateMonitor
+from lightning.pytorch.callbacks import ModelCheckpoint, TQDMProgressBar
 import warnings
 warnings.filterwarnings('ignore')
 import matplotlib
 matplotlib.use("Agg") # to prevent the allocate bitmap warning
 
 from pytorch_forecasting.models.temporal_fusion_transformer import TemporalFusionTransformer
-from pytorch_forecasting import TimeSeriesDataSet
-from pytorch_forecasting.metrics import MultiHorizonMetric
+from pytorch_forecasting import TimeSeriesDataSetW
 from pytorch_forecasting.metrics import MAE, MAPE, SMAPE, RMSE, QuantileLoss
 
 # Setup
@@ -30,23 +29,18 @@ RESULT_PATH = os.path.join(BASE_PATH, 'results')
 SHARE_PATH = 'J:/Berlin/B22-FISHy/NUTZER/Kunz.S/kimodis_preprocessed'
 
 # Specify model type
-MODEL_TYPE = 'dyn' # full # full_interpol
 BATCH_SIZE = 4096
 VERSION = '10_Epochs'
 
-
 # Model types:
 # - full: all input features  
-# - full_interpol: all input features except for the gw level, doesn't work with N-HiTS. 
-# Respective Error:
-# [self.hparams.x_reals.index(name) for name in to_list(target)],
-# ValueError: 'gwl' is not in list
+# - full_interpol: all input features except for the gw level 
 # - dyn: only dynamic input features
 MODEL_TYPE_ls = ['full', 'full_interpol' ,'dyn'] 
-seeds = [94, 673, 1899, 2149, 9898]
+seeds = [40, 94, 673, 1899, 2100, 2149, 2230, 6013, 9595, 9898]
 
 for MODEL_TYPE in MODEL_TYPE_ls: 
-    
+
     # Load TFT TimeSeriesDataSets and create dataloaders
     train_ds = TimeSeriesDataSet.load(os.path.join(SHARE_PATH, f'train_ds_{MODEL_TYPE}_tft.pt'))
     print(len(train_ds.decoded_index['proj_id'].unique()), 'sites are in the training data.')
@@ -73,12 +67,15 @@ for MODEL_TYPE in MODEL_TYPE_ls:
         # Logging metrics: SMAPE, MAE, RMSE, MAPE
         # Metrics: 
         # https://pytorch-forecasting.readthedocs.io/en/stable/api/pytorch_forecasting.metrics.point.RMSE.html#
+        lr = 0.003981 # only parameter that has been optimized
         model = TemporalFusionTransformer.from_dataset(train_ds, 
-                                                      loss=QuantileLoss()) # QuantileLoss()
+                                                      loss=QuantileLoss(), 
+                                                      dropout=0.2, 
+                                                      learning_rate=lr) # QuantileLoss()
 
         # Logger
         tb_logger = TensorBoardLogger(save_dir=f'D:/KIMoDIs/global-groundwater-models-main/models/tft/tft_{MODEL_TYPE}', 
-                                     name=f'tft_{MODEL_TYPE}_{BATCH_SIZE}_{VERSION}')
+                                      name=f'tft_{MODEL_TYPE}_{BATCH_SIZE}_{VERSION}')
 
         # Early stopping
         # Patience is the number of checks with no improvement after which training will be stopped
@@ -94,12 +91,17 @@ for MODEL_TYPE in MODEL_TYPE_ls:
         # trainer.test(best_model)
         checkpoint_callback = ModelCheckpoint(monitor="val_loss", mode="min")
 
+        # Schedule to reduce the learning rate throughout training
+        lr_sched = StochasticWeightAveraging(swa_lrs=lr, swa_epoch_start=2, device=torch.device('cuda:0'))
+        lr_logger = LearningRateMonitor(logging_interval='step')  # log the learning rate ('step' or 'epoch')
+
         # Training
         # https://lightning.ai/docs/pytorch/stable/api/lightning.pytorch.trainer.trainer.Trainer.html
         trainer = pl.Trainer(
             max_epochs=10,
             accelerator='gpu', 
-            devices=4,
+            gradient_clip_val=0.2, #Prevent overfitting
+            devices=4, #GPU devices
             enable_model_summary=True,
             strategy=ddp,
             fast_dev_run=True,

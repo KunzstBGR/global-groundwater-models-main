@@ -16,8 +16,8 @@ from lightning.pytorch import seed_everything
 from lightning.pytorch.strategies import DDPStrategy
 # from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.loggers import TensorBoardLogger
-from lightning.pytorch.callbacks import EarlyStopping
-from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.callbacks import EarlyStopping, StochasticWeightAveraging, LearningRateMonitor
+from lightning.pytorch.callbacks import ModelCheckpoint, TQDMProgressBar
 import warnings
 warnings.filterwarnings('ignore')
 import matplotlib
@@ -48,8 +48,8 @@ LEAD=12
 # [self.hparams.x_reals.index(name) for name in to_list(target)],
 # ValueError: 'gwl' is not in list
 # - dyn: only dynamic input features
-MODEL_TYPE_ls = ['full','dyn'] # 'full_interpol' 
-seeds = [94, 673, 1899, 2149, 9898]
+MODEL_TYPE_ls = ['full', 'dyn'] # , 'full_interpol' 
+seeds = [40, 94, 673, 1899, 2100, 2149, 2230, 6013, 9595, 9898]
 
 for MODEL_TYPE in MODEL_TYPE_ls: 
 
@@ -77,10 +77,12 @@ for MODEL_TYPE in MODEL_TYPE_ls:
 
         # Docs:
         # https://pytorch-forecasting.readthedocs.io/en/stable/api/pytorch_forecasting.models.nhits.NHiTS.html#pytorch_forecasting.models.nhits.NHiTS
+        lr = 0.01 # Default
         model=NHiTS.from_dataset(
             train_ds,
             #hidden_size=512, # size of hidden layers, default 512, min 8, max 1024; Use 32-128 if no covariates are employed
-            loss=MQF2DistributionLoss(prediction_length=LEAD)
+            loss=MQF2DistributionLoss(prediction_length=LEAD),
+            dropout=0.2
         )
 
         # Logger
@@ -91,7 +93,7 @@ for MODEL_TYPE in MODEL_TYPE_ls:
         # Patience is the number of checks with no improvement after which training will be stopped
         # Default: one check after every training epoch 
         # Also connected with check_val_every_n_epoch (set in trainer)
-        # https://lightning.ai/docs/pytorch/2.0.4/api/lightning.pytorch.callbacks.EarlyStopping.html
+        # https://lightning.ai/docs/pytorch/2.1.2/api/lightning.pytorch.callbacks.EarlyStopping.html
         early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=5, verbose=False, mode="min")
 
         # Checkpoint callback
@@ -101,6 +103,10 @@ for MODEL_TYPE in MODEL_TYPE_ls:
         # trainer.test(best_model)
         checkpoint_callback = ModelCheckpoint(monitor="val_loss", mode="min")
 
+        # Schedule to reduce the learning rate throughout training
+        lr_sched = StochasticWeightAveraging(swa_lrs=lr, swa_epoch_start=2, device=torch.device('cuda:0'))
+        lr_logger = LearningRateMonitor(logging_interval='step')  # log the learning rate ('step' or 'epoch')
+
         # Training
         trainer = pl.Trainer(
             max_epochs=10,
@@ -109,7 +115,7 @@ for MODEL_TYPE in MODEL_TYPE_ls:
             enable_model_summary=True,
             strategy=ddp,
             # fast_dev_run=True,
-            callbacks=[early_stop_callback, checkpoint_callback],
+            callbacks=[early_stop_callback, checkpoint_callback, lr_sched, lr_logger, TQDMProgressBar()],
             logger=tb_logger,
             log_every_n_steps=10,  # Default = 50 (steps)
             val_check_interval=0.2 # Check after 20% of each epoch
