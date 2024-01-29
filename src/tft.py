@@ -105,7 +105,7 @@ for MODEL_TYPE in MODEL_TYPE_ls:
             enable_model_summary=True,
             strategy=ddp,
             fast_dev_run=True,
-            callbacks=[early_stop_callback, checkpoint_callback],
+            callbacks=[early_stop_callback, checkpoint_callback, lr_sched, lr_logger, TQDMProgressBar()],
             logger=tb_logger,
             log_every_n_steps=10,  # Default = 50 (steps)
             val_check_interval=0.2 # Check after 50% of each epoch
