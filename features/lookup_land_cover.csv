@@ -1,0 +1,24 @@
+code;class;color
+0;;#ffffff
+20;Shrubs;#cddf4d
+30;Herbaceous vegetation;#f19636
+40;Cultivated and managed vegetation/agriculture;#fff700
+50;Urban/built up;#ff0000
+60;Bare/sparse vegetation;#9e9e9e
+70;Snow and Ice;#4dc0df
+80;Permanent water bodies;#0055ff
+90;Herbaceous wetland;#cf8a51
+100;Moss and lichen;#ab9832
+111;Closed forest, evergreen needle leaf;#73f25f
+112;Closed forest, evergreen broad leaf;
+113;Closed forest, deciduous needle leaf;
+114;Closed forest, deciduous broad leaf;#53ca40
+115;Closed forest, mixed;#38b024
+116;Closed forest, unknown;#1c9c07
+121;Open forest, evergreen needle leaf;#91eab9
+122;Open forest, evergreen broad leaf;
+123;Open forest, deciduous needle leaf;
+124;Open forest, deciduous broad leaf;#59bf87
+125;Open forest, mixed;#35a567
+126;Open forest, unknown;#1c864b
+200;Open sea;#0a0a44

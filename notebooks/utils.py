@@ -161,7 +161,56 @@ def plot_predictions(predictions_df, proj_id, horizon=1, forecast_col='forecast'
     )
     return fig, ax
 
-# Functions used in the preprocessing ################################################################################################
+# Time Series Features functions
+"""
+Seasonal behaviour according to Wunsch et al. (2022)
+"""
+def seasonal_behaviour(data: pd.DataFrame):
+    
+    # Calculate monthly mean values
+    monthly_mean = pd.DataFrame(data.groupby(['proj_id', 'month'])['z_gwl'].mean()).reset_index()
+    monthly_mean = monthly_mean.rename(columns={'z_gwl':'mean_gwl'})
+    
+    # Idealised seasonal behaviour
+    representative = [np.sin(1/(6/np.pi)*i) for i in range(1, 13)]
+    representative_df = pd.DataFrame({'seasonality': representative, 
+                                      'month': range(1,13)})
+    
+    # Calc correlation with seasonality to obtain the seasonal behaviour
+    monthly_mean = monthly_mean.merge(representative_df, on='month')
+    monthly_mean = monthly_mean.sort_values(by=['proj_id', 'month'])
+    pearson_r = monthly_mean.groupby(['proj_id'])[['mean_gwl', 'seasonality']].corr(method='pearson').iloc[0::2].reset_index()
+    pearson_r = pearson_r.rename(columns={'seasonality': 'corr_seasonality'})
+    pearson_r = pearson_r[['proj_id', 'corr_seasonality']]
+    monthly_mean = monthly_mean.merge(pearson_r, on='proj_id')    
+
+    # Calc distance to consider the yearly amplitude
+    def amplitude(x):
+        if x['corr_seasonality'].iloc[0] >= 0:
+            return np.linalg.norm(x['seasonality'] - x['mean_gwl'])
+        else:
+            return np.linalg.norm((x['seasonality']*-1) - x['mean_gwl'])
+     
+    distance = pd.DataFrame({'euclidean':monthly_mean.groupby('proj_id').apply(amplitude)}).reset_index()
+    monthly_mean = monthly_mean.merge(distance, on = 'proj_id')
+
+    # Metric
+    monthly_mean['sb_metric'] = monthly_mean['corr_seasonality'] / monthly_mean['euclidean']
+    return monthly_mean
+
+# Flashiness
+"""
+Flashiness according to Wunsch et al. (2022)
+"""
+def SD_diff(x):
+    # Compute the differences between consecutive elements
+    differences = np.diff(x)
+    # Compute the standard deviation
+    std_dev = np.nanstd(differences)
+    return std_dev
+
+
+# Functions used in the preprocessing 
 # Function to flag jumps in consecutive gwlevels
 def detect_jumps(group, column, threshold):
     # calculate diff for each group
@@ -201,3 +250,55 @@ def interpolate_gwl(dataframe, interpolation_column, resample_freq='7D', limit=4
 # check after performing the interpolation
 # filtered_train[(filtered_train['proj_id']=='BB_27390101') & (filtered_train['time']<='2003-12-07')].tail(5)
 # interpolate_gwl(test, 'gwl')
+
+
+# Filter out large gaps (based on threshold) of the beginning and end of each time series
+def rm_gaps_beg_end(group, threshold):
+    if group.shape[0] > 1:
+        first_gap = group['time_diff'].iloc[1] # set to 1 because first value in time_diff is always NAT
+        last_gap = group['time_diff'].iloc[-1]
+        if first_gap > threshold:
+            group = group.iloc[2:] # set to 2 because first and second value in time_diff are always NAT and the large gap
+        if last_gap > threshold:
+            group = group.iloc[:-1]
+    return group
+
+# TEST for rm_gaps_beg_end
+# Test data.frame for filter_large_gaps (beginning and end)
+from datetime import datetime, timedelta
+
+# Define the initial parameters
+# proj_id = 'A_1'
+# start_date = datetime.now() - timedelta(days=100)  # Start from a date around 10 days ago
+# time_diff = timedelta(days=7)  # One week time difference
+
+# Create a list of time points
+# time_points = [start_date]
+# time_points.extend(time_points[-1] + timedelta(days=36) if i in [0] else time_points[-1] + timedelta(days=7) for i in range(7))
+# time_points.append(time_points[-1] + timedelta(days=36))
+
+# Create a DataFrame
+# data = {"proj_id": [proj_id] * len(time_points), "time": time_points}
+# df = pd.DataFrame(data)
+# df['time_diff'] = df.groupby('proj_id')['time'].diff()
+# df
+
+# time_points_alt = [start_date + i * timedelta(days=7) for i in range(8)]
+# data_alt = {"proj_id": [proj_id] * len(time_points_alt), "time": time_points_alt}
+# df_alt = pd.DataFrame(data_alt)
+
+# df_alt['time_diff'] = df_alt.groupby('proj_id')['time'].diff()
+# df_alt
+
+
+# Function to identify outliers within a window
+def detect_outliers(group, window_size):
+    rolling_mean = group['gwl'].rolling(window=window_size, min_periods=1).mean()
+    rolling_std = group['gwl'].rolling(window=window_size, min_periods=1).std()
+    
+    upper_limit = rolling_mean + 3 * rolling_std
+    lower_limit = rolling_mean - 3 * rolling_std
+    
+    group['is_outlier'] = (group['gwl'] > upper_limit) | (group['gwl'] < lower_limit)
+    
+    return group

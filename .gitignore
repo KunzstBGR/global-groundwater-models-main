@@ -1,0 +1,33 @@
+data/
+figures/
+models/
+reports/
+results/preprocessing/
+results/interpretation/
+results/metrics/
+results/predictions/
+venv/
+2023-global-model-germany-main/
+notebooks/__pycache__/
+notebooks/.ipynb_checkpoints/
+notebooks/lightning_logs/
+notebooks/old/
+notebooks/not related
+notebooks/experiments
+notebooks/integrated gradients
+requirements_GLOBAL_LSTM.txt
+src/TODO.md
+src/testing_things.py
+src/test_tft.py
+src/statistical_ts_minibenchmark.py
+results/example_ts.parquet
+src/global_lstm.py
+results/interpretation/tft/tft_dyn/tft_dyn_4096_10_Epochs/tft_version_0_variable_importance_dyn.json
+notebooks/preprocessing/Testing/Test_LSTM_Lightning.ipynb
+notebooks/preprocessing/Testing/Self_attention_small_example.ipynb
+notebooks/preprocessing/Testing/LSTM_Baseline_Pytorch.ipynb
+models/tft/tft_dyn/tft_dyn_4096_10_Epochs/version_0/hparams.yaml
+figures/tft/tft_dyn/tft_dyn_4096_10_epochs/tft_version_0_interpret_attention.png
+figures/tft/tft_dyn/tft_dyn_4096_10_epochs/tft_version_0_interpret_attention.png
+notebooks/comparison_nhits_tft_lnx_wd.ipynb
+notebooks/sites_nan_inf.ipynb

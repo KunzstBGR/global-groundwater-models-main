@@ -1,5 +1,4 @@
 # N-HiTS
-# Tutorial: https://pytorch-forecasting.readthedocs.io/en/stable/tutorials/nhits.html
 # !pip --proxy http://wwwproxy.nlfb.bgr.de:8080 install "pytorch-forecasting[mqf2]"
 
 # Imports ----
@@ -31,10 +30,8 @@ from pytorch_forecasting.metrics.distributions import MQF2DistributionLoss
 
 # Setup ----
 BASE_PATH = 'D:/KIMoDIs/global-groundwater-models-main'
-DATA_PATH = os.path.join(BASE_PATH, 'data')
 MODEL_PATH = os.path.join(BASE_PATH, 'models')
 RESULT_PATH = os.path.join(BASE_PATH, 'results')
-SHARE_PATH = 'J:/Berlin/B22-FISHy/NUTZER/Kunz.S/kimodis_preprocessed'
 
 # Specify Batch size and lead (for multivariate quantile loss)
 BATCH_SIZE = 1024
@@ -43,24 +40,24 @@ LEAD=12
 
 # Model types:
 # - full: all input features  
-# - full_interpol: all input features except for the gw level, doesn't work with N-HiTS. 
+# - dyn: only dynamic input features
+# (- full_interpol: all input features except for the gw level, doesn't work with N-HiTS. 
 # Respective Error:
 # [self.hparams.x_reals.index(name) for name in to_list(target)],
-# ValueError: 'gwl' is not in list
-# - dyn: only dynamic input features
-MODEL_TYPE_ls = ['full', 'dyn'] # , 'full_interpol' 
-seeds = [40, 94, 673, 1899, 2100, 2149, 2230, 6013, 9595, 9898]
+# ValueError: 'gwl' is not in list)
+MODEL_TYPE_ls = ['full'] # 'dyn' 
+seeds = [40] # , 94, 673, 1899, 2100, 2149, 2230, 6013, 9595, 9898
 
 for MODEL_TYPE in MODEL_TYPE_ls: 
 
     # Load time series dataset from share
-    train_ds = TimeSeriesDataSet.load(os.path.join(SHARE_PATH,  f'train_ds_{MODEL_TYPE}_nhits.pt'))
-
+    train_ds = TimeSeriesDataSet.load(os.path.join(RESULT_PATH, 'preprocessing', f'train_ds_{MODEL_TYPE}_nhits.pt'))
+    
     # Should be 5308 sites 
     print(len(train_ds.decoded_index['proj_id'].unique()), 'sites are in the training data.')
     train_dataloader = train_ds.to_dataloader(train=True, batch_size=BATCH_SIZE, num_workers=0)
 
-    val_ds = TimeSeriesDataSet.load(os.path.join(SHARE_PATH, f'val_ds_{MODEL_TYPE}_nhits.pt'))
+    val_ds = TimeSeriesDataSet.load(os.path.join(RESULT_PATH, 'preprocessing', f'val_ds_{MODEL_TYPE}_nhits.pt'))
     # Should be 5308 sites
     print(len(val_ds.decoded_index['proj_id'].unique()), 'sites are in the validation data.')
     val_dataloader = val_ds.to_dataloader(train=False, batch_size=BATCH_SIZE, num_workers=0)
@@ -81,7 +78,7 @@ for MODEL_TYPE in MODEL_TYPE_ls:
         model=NHiTS.from_dataset(
             train_ds,
             #hidden_size=512, # size of hidden layers, default 512, min 8, max 1024; Use 32-128 if no covariates are employed
-            loss=MQF2DistributionLoss(prediction_length=LEAD),
+            loss=MQF2DistributionLoss(prediction_length=LEAD), # 
             dropout=0.2
         )
 
@@ -94,7 +91,7 @@ for MODEL_TYPE in MODEL_TYPE_ls:
         # Default: one check after every training epoch 
         # Also connected with check_val_every_n_epoch (set in trainer)
         # https://lightning.ai/docs/pytorch/2.1.2/api/lightning.pytorch.callbacks.EarlyStopping.html
-        early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=5, verbose=False, mode="min")
+        early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=5, verbose=False, mode="min") # patience=5
 
         # Checkpoint callback
         # Used to save the best model (or top-k best models)
@@ -116,7 +113,7 @@ for MODEL_TYPE in MODEL_TYPE_ls:
             strategy=ddp,
             # fast_dev_run=True,
             callbacks=[early_stop_callback, checkpoint_callback, lr_sched, lr_logger, TQDMProgressBar()],
-            logger=tb_logger,
+                logger=tb_logger,
             log_every_n_steps=10,  # Default = 50 (steps)
             val_check_interval=0.2 # Check after 20% of each epoch
         )
@@ -125,3 +122,6 @@ for MODEL_TYPE in MODEL_TYPE_ls:
             train_dataloaders=train_dataloader,
             val_dataloaders=val_dataloader
         )
+        
+# Access tensorboard:
+# tensorboard --logdir=version_ ...
