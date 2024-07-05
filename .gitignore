@@ -1,8 +1,5 @@
 data/
 figures/
-#figures/tft/tft_dyn/tft_dyn_4096_10_epochs/tft_version_0_interpret_attention.png
-#figures/tft/tft_dyn/tft_dyn_4096_10_epochs/tft_version_0_interpret_attention.png
-figures/tft
 models/
 reports/
 results/preprocessing/
